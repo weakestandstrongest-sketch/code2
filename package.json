@@ -1,0 +1,10 @@
+{
+  "name": "chord-finder-ji",
+  "version": "1.0.0",
+  "private": true,
+  "description": "構成音からコード名を判定し、純正律での各音のずれ（セント）を表示する Web アプリ",
+  "scripts": {
+    "test": "node --test test/",
+    "start": "npx http-server . -p 8080 -c-1"
+  }
+}

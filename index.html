@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chord Finder JI</title>
+  <meta name="description" content="構成音からコード名を判定し、純正律で各音を何セント調整すればよいかを表示します。">
+  <meta name="theme-color" content="#343a40">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Chord JI">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="navbar">
+    <span class="brand">Chord Finder <span class="brand-ji">JI</span></span>
+  </header>
+
+  <section class="hero">
+    <h1>コード名検索 × 純正律</h1>
+    <p>構成音からコード名を判定し、<br>純正律での各音のずれ（セント）を表示します。</p>
+  </section>
+
+  <main class="container">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" role="tab" data-tab="single" aria-selected="true">個別</button>
+      <button class="tab" role="tab" data-tab="bulk" aria-selected="false">一括</button>
+    </nav>
+
+    <!-- 個別 -->
+    <section id="tab-single" class="tab-panel">
+      <div class="input-wrap">
+        <input id="notes-input" type="text" inputmode="text" placeholder="ファシ♭ド"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               aria-label="構成音">
+        <button id="clear-input" class="clear-btn" aria-label="クリア">✕</button>
+      </div>
+      <p class="hint">※低い音から順に構成音を入力します。例： ソ♭シド、れふぁ#ら、AbCEb、C3 E4 G4</p>
+      <div id="chips" class="chips" aria-live="polite"></div>
+
+      <details class="keyboard-box" id="keyboard-box">
+        <summary>🎹 鍵盤で入力</summary>
+        <div class="keyboard-tools">
+          <span>黒鍵の表記</span>
+          <div class="seg" id="spelling-seg">
+            <button data-value="sharp">♯</button>
+            <button data-value="flat">♭</button>
+          </div>
+          <button id="kb-clear" class="btn-small">全消去</button>
+        </div>
+        <div class="keyboard-scroll" id="keyboard-scroll">
+          <div class="keyboard" id="keyboard"></div>
+        </div>
+        <p class="hint">鍵盤をタップで追加・もう一度タップで削除。押さえた鍵盤には純正律のずれが表示されます。</p>
+      </details>
+
+      <div id="result" class="result" hidden>
+        <div class="result-head" id="result-head"></div>
+        <div class="result-body" id="result-body"></div>
+      </div>
+
+      <section id="ji" class="ji" hidden>
+        <h2 class="section-title">純正律チューナー</h2>
+        <div class="settings">
+          <label class="setting">
+            <span>音律</span>
+            <select id="mode-select">
+              <option value="just5">純正律（5リミット）</option>
+              <option value="just7">純正律（7リミット・倍音列）</option>
+              <option value="pyth">ピタゴラス音律</option>
+            </select>
+          </label>
+          <label class="setting">
+            <span>0セントの基準</span>
+            <select id="ref-select">
+              <option value="root">コードのルート</option>
+              <option value="bass">最低音（ベース）</option>
+              <option value="key">調の主音 →</option>
+            </select>
+          </label>
+          <label class="setting" id="tonic-setting" hidden>
+            <span>主音</span>
+            <select id="tonic-select"></select>
+          </label>
+          <label class="setting">
+            <span>A4 =</span>
+            <span class="a4-wrap"><input id="a4-input" type="number" inputmode="decimal" min="400" max="480" step="0.5" value="440"> Hz</span>
+          </label>
+        </div>
+
+        <p class="ratio-line" id="ratio-line"></p>
+        <div id="ji-rows" class="ji-rows"></div>
+        <p class="hint">比をタップすると別の純正比に切り替えられます。セント値は「平均律（A4基準）からのずれ」なので、チューナーの表示をこの値に合わせてください。</p>
+
+        <div class="play-row">
+          <button class="btn play" id="play-et">▶ 平均律</button>
+          <button class="btn play primary" id="play-ji">▶ 純正律</button>
+          <button class="btn play" id="play-ab">⇄ 聴き比べ</button>
+        </div>
+        <p class="hint" id="play-status">※iPhoneの消音モード中は音が出ない場合があります。</p>
+      </section>
+    </section>
+
+    <!-- 一括 -->
+    <section id="tab-bulk" class="tab-panel" hidden>
+      <textarea id="bulk-input" rows="6" placeholder="1行に1つずつ構成音を入力&#10;例：&#10;ドミソ&#10;レファラド&#10;ソシレファ"
+                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+      <p class="hint">音律・基準の設定は「個別」タブと共通です。行をタップすると個別表示に切り替わります。</p>
+      <div id="bulk-result"></div>
+    </section>
+
+    <hr>
+
+    <article class="about">
+      <h2>開発目的と用途</h2>
+      <p>このアプリは、与えられた構成音からコード名を判定し、さらにその和音を<strong>純正律</strong>で響かせるには各音を平均律から何セント動かせばよいかを、チューナー感覚で確認するためのツールです。</p>
+      <p>耳コピや作曲・編曲でのコード名の判定に加えて、合唱・弦楽器・管楽器のハーモニー練習や、純正律そのものの探求に使えます。</p>
+
+      <h2>純正律の見方</h2>
+      <p>純正律では、和音の各音が簡単な整数比になるように調律します。たとえば C メジャー（ドミソ）は周波数比 <strong>4:5:6</strong> です。</p>
+      <ul>
+        <li>ルート C … <strong>0</strong> セント</li>
+        <li>長3度 E（5/4）… 平均律より <strong>−13.7</strong> セント低く</li>
+        <li>完全5度 G（3/2）… 平均律より <strong>+2.0</strong> セント高く</li>
+      </ul>
+      <p>マイナーコードでは短3度（6/5）が <strong>+15.6</strong> セント高くなります。属七の和音の7度は、5リミットでは 16/9（−3.9）、倍音列に基づく7リミットでは 7/4（<strong>−31.2</strong>）です。比をタップして違いを聴き比べてみてください。</p>
+
+      <h2>0セントの基準</h2>
+      <ul>
+        <li><strong>コードのルート</strong> … ルートを平均律のまま固定し、他の音をルートに合わせます。</li>
+        <li><strong>最低音</strong> … ベースの音を固定します。転回形・分数コードで便利です。</li>
+        <li><strong>調の主音</strong> … 調の主音を固定し、ルート自体も主音に対して純正にとります。たとえばハ長調で Am を鳴らすと、ルートの A は 5/3 で <strong>−15.6</strong> セントになります。コード進行によってシントニック・コンマ（約21.5セント）のずれが現れる様子が観察できます。</li>
+      </ul>
+
+      <h2>入力のしかた</h2>
+      <ul>
+        <li>カタカナ・ひらがな：ドレミファソラシ（♯ / # / ♭ / b）</li>
+        <li>英字：C D E F G A B（♯ / # / ♭ / b）。大文字を含むときは英字の直後の小文字 b をフラットとして扱います（例：AbCEb）。小文字だけで入力したとき、b は音名の B（シ）です（例：gbd = G B D）。</li>
+        <li>英字の後ろに数字を付けるとオクターブを指定できます（C4 = 中央のド）。省略すると下から順に積み重ねます。</li>
+        <li>スコアは単純で一般的なコード名ほど高く（0に近く）なります。</li>
+      </ul>
+      <p class="hint">ホーム画面に追加すると、アプリのようにオフラインでも使えます（Safari の共有ボタン →「ホーム画面に追加」）。</p>
+    </article>
+  </main>
+
+  <script src="js/engine.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
