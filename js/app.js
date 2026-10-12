@@ -462,49 +462,21 @@
     });
   }
 
-  /* -------------------------------------------------------------- bulk */
+  /* --------------------------------------------------------- masthead */
 
-  function renderBulk() {
-    const out = $('bulk-result');
-    out.replaceChildren();
-    const lines = $('bulk-input').value.split('\n').map((s) => s.trim()).filter(Boolean);
-    lines.forEach((line, i) => {
-      const a = E.analyze(line);
-      const c = a.candidates[0];
-      const offs = el('span', { class: 'offs' });
-      if (a.notes.length) {
-        const t = E.tune(a.notes, c || null, tuneOpts(false));
-        for (const r of t.rows) {
-          offs.append(el('span', {}, r.note.name + ' ', el('b', { class: centsClass(r.offset) + '-t' }, fmtCents(r.offset))));
-        }
-        if (t.ints && t.rows.length > 1) offs.append(el('span', { class: 'ratio' }, t.ints.join(':')));
+  /** 長三和音 4:5:6 の波形を重ねた飾り線 */
+  function drawWaves() {
+    const g = $('mast-waves');
+    const W = 360;
+    const H = 44;
+    [4, 5, 6].forEach((k, i) => {
+      let d = '';
+      for (let x = 0; x <= W; x += 2) {
+        const y = H / 2 + Math.sin((x / W) * Math.PI * 2 * k) * (H / 2 - 4) * (0.55 + 0.45 * Math.sin((x / W) * Math.PI));
+        d += (x ? 'L' : 'M') + x + ' ' + y.toFixed(2);
       }
-      out.append(el('button', {
-        class: 'bulk-card',
-        onclick: () => {
-          switchTab('single');
-          setInput(line);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        },
-      },
-      el('span', { class: 'no' }, String(i + 1).padStart(2, '0')),
-      el('span', { class: 'chord' }, c ? c.name : '—'),
-      el('span', { class: 'src' }, line),
-      offs));
+      g.append(svg('path', { d, class: 'wave w' + i }));
     });
-  }
-
-  /* -------------------------------------------------------------- tabs */
-
-  function switchTab(name) {
-    document.querySelectorAll('.tab').forEach((b) => {
-      const on = b.dataset.tab === name;
-      b.classList.toggle('active', on);
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    $('tab-single').hidden = name !== 'single';
-    $('tab-bulk').hidden = name !== 'bulk';
-    if (name === 'bulk') renderBulk();
   }
 
   /* ---------------------------------------------------------- settings */
@@ -532,7 +504,6 @@
     syncSettingsUI();
     state.overrides = {};
     renderTuningViews();
-    if (!$('tab-bulk').hidden) renderBulk();
   }
 
   function bindSeg(id, apply) {
@@ -548,6 +519,7 @@
     E.PC_NAMES_FLAT.forEach((n, i) => tonic.append(el('option', { value: i }, n + (i === 6 ? ' / F♯' : ''))));
     syncSettingsUI();
     buildKeyboard();
+    drawWaves();
 
     const input = $('notes-input');
     let composing = false;
@@ -580,20 +552,12 @@
       onSettingsChanged();
     });
     $('pitch-pill').addEventListener('click', () => {
-      switchTab('single');
       $('settings').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
     $('play-et').addEventListener('click', () => play('et'));
     $('play-ji').addEventListener('click', () => play('ji'));
     $('play-ab').addEventListener('click', () => play('ab'));
-
-    document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
-    let bulkTimer = null;
-    $('bulk-input').addEventListener('input', () => {
-      clearTimeout(bulkTimer);
-      bulkTimer = setTimeout(renderBulk, 150);
-    });
 
     if (location.hash.startsWith('#q=')) {
       try { state.input = decodeURIComponent(location.hash.slice(3)); } catch (e) { state.input = ''; }

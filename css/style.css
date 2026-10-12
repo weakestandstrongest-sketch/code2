@@ -22,6 +22,7 @@
   --ebony-1: #34353b;
   --ebony-2: #08090b;
 
+  --f-mincho: "Hiragino Mincho ProN", "Shippori Mincho", "Yu Mincho", "Noto Serif JP", serif;
   --f-display: "Bodoni Moda", "Bodoni 72", Didot, "Hiragino Mincho ProN", Georgia, serif;
   --f-body: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
   --f-mono: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -53,32 +54,7 @@ button { cursor: pointer; touch-action: manipulation; }
 
 .hint { font-size: 0.8rem; color: var(--muted); margin: 8px 0 0; }
 
-/* ---------------------------------------------------------------- top bar */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
-  background: rgba(12, 13, 16, 0.78);
-  -webkit-backdrop-filter: saturate(140%) blur(14px);
-  backdrop-filter: saturate(140%) blur(14px);
-  border-bottom: 1px solid rgba(42, 46, 56, 0.7);
-}
-.tabs { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-.tab {
-  border: none;
-  background: none;
-  border-radius: 999px;
-  padding: 5px 18px;
-  font-size: 0.9rem;
-  color: var(--muted);
-  transition: background 0.2s, color 0.2s;
-}
-.tab.active { background: var(--fg); color: var(--bg); font-weight: 600; }
+/* --------------------------------------------------------------- masthead */
 .pitch-pill {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -89,6 +65,39 @@ button { cursor: pointer; touch-action: manipulation; }
   color: var(--muted);
   letter-spacing: 0.02em;
 }
+.masthead { padding: calc(env(safe-area-inset-top, 0px) + 22px) 2px 18px; }
+.mast-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.eyebrow {
+  margin: 0;
+  font-family: var(--f-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.eyebrow .dot { margin: 0 0.5em; color: var(--muted); }
+.mast-title {
+  margin: 18px 0 0;
+  font-family: var(--f-mincho);
+  font-weight: 600;
+  font-size: clamp(2.3rem, 11.5vw, 3.3rem);
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-wrap: balance;
+}
+.mast-title em {
+  font-style: normal;
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.mast-waves { display: block; width: 100%; height: 44px; margin: 14px 0 0; }
+.mast-waves .wave { fill: none; stroke: var(--gold); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.mast-waves .w0 { opacity: 0.22; }
+.mast-waves .w1 { opacity: 0.4; }
+.mast-waves .w2 { opacity: 0.7; stroke: var(--gold-hi); }
+.mast-lead { margin: 10px 0 0; color: var(--muted); font-size: 0.86rem; max-width: 34em; }
 .pitch-pill b { color: var(--gold-hi); font-weight: 500; margin: 0 2px 0 6px; font-size: 0.95rem; }
 .pitch-pill small { font-size: 0.72rem; }
 
@@ -100,17 +109,6 @@ button { cursor: pointer; touch-action: manipulation; }
   padding-block: 8px calc(env(safe-area-inset-bottom, 0px) + 40px);
 }
 
-.intro { padding: 18px 2px 14px; }
-.intro h1 {
-  font-family: var(--f-body);
-  font-size: 1.45rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  margin: 0;
-  text-wrap: balance;
-}
-.intro .x { font-family: var(--f-display); color: var(--gold); font-weight: 400; margin: 0 0.3em; }
-.intro p { margin: 4px 0 0; color: var(--muted); font-size: 0.86rem; max-width: 34em; }
 
 /* ------------------------------------------------------------------ input */
 .field { position: relative; }
@@ -452,38 +450,6 @@ button { cursor: pointer; touch-action: manipulation; }
 .sheet .close { width: 100%; margin-top: 12px; border: 1px solid var(--line); background: none; border-radius: 12px; padding: 11px; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
-
-/* ------------------------------------------------------------------- bulk */
-#bulk-input {
-  width: 100%;
-  font-size: 16px;
-  line-height: 1.7;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--surface);
-  caret-color: var(--gold-hi);
-  resize: vertical;
-  outline: none;
-}
-#bulk-input:focus { border-color: var(--gold); box-shadow: 0 0 0 4px rgba(207, 169, 87, 0.16); }
-.bulk-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-.bulk-card {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 2px 10px;
-  text-align: left;
-  width: 100%;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 14px;
-  padding: 12px 14px;
-}
-.bulk-card .no { grid-row: span 3; font-family: var(--f-mono); color: var(--muted); font-size: 0.8rem; padding-top: 6px; }
-.bulk-card .chord { font-family: var(--f-display); font-size: 1.5rem; font-weight: 500; line-height: 1.2; }
-.bulk-card .src { font-size: 0.78rem; color: var(--muted); word-break: break-all; }
-.bulk-card .offs { font-family: var(--f-mono); font-size: 0.78rem; display: flex; flex-wrap: wrap; gap: 2px 12px; }
-.bulk-card .offs .ratio { color: var(--gold-hi); }
 
 /* ------------------------------------------------------------------ about */
 .about { margin-top: 40px; padding: 0 2px; }

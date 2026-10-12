@@ -16,25 +16,22 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400..700&family=DM+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600&text=%E5%92%8C%E9%9F%B3%E3%82%92%E3%80%81%E7%B4%94%E6%AD%A3%E3%81%AB%E3%80%82&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <nav class="tabs" role="tablist" aria-label="表示切り替え">
-      <button class="tab active" role="tab" id="tab-btn-single" data-tab="single" aria-selected="true">個別</button>
-      <button class="tab" role="tab" id="tab-btn-bulk" data-tab="bulk" aria-selected="false">一括</button>
-    </nav>
-    <button class="pitch-pill" id="pitch-pill" aria-label="基準ピッチの設定へ">A4 <b id="pill-a4">442</b><small>Hz</small></button>
-  </header>
-
   <main class="wrap">
-    <section class="intro">
-      <h1>コード名検索<span class="x">×</span>純正律</h1>
-      <p>構成音からコード名を判定し、純正律で響かせるには各音を平均律から何セント動かせばよいかを表示します。</p>
-    </section>
+    <header class="masthead">
+      <div class="mast-row">
+        <p class="eyebrow">Just Intonation<span class="dot">·</span>Tuner</p>
+        <button class="pitch-pill" id="pitch-pill" aria-label="基準ピッチの設定へ">A4 <b id="pill-a4">442</b><small>Hz</small></button>
+      </div>
+      <h1 class="mast-title">和音を、<em>純正</em>に。</h1>
+      <svg class="mast-waves" id="mast-waves" viewBox="0 0 360 44" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <p class="mast-lead">構成音を入れるだけで、コード名と、その和音を純正に響かせるための各音のずれ（セント）がわかります。</p>
+    </header>
 
-    <!-- 個別 -->
-    <section id="tab-single" class="tab-panel">
+    <section id="finder">
       <div class="field">
         <input id="notes-input" type="text" inputmode="text" placeholder="ドミソ / C E G"
                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
@@ -68,6 +65,24 @@
         <div class="cands" id="cands"></div>
         <p class="hint" id="cand-note"></p>
       </section>
+
+      <details class="block keyboard-box" id="keyboard-box">
+        <summary>
+          <span>鍵盤で入力</span>
+          <span class="summary-sub">タップで追加・もう一度で削除</span>
+        </summary>
+        <div class="keyboard-tools">
+          <span>黒鍵の表記</span>
+          <div class="seg small" id="spelling-seg">
+            <button data-value="sharp">♯</button>
+            <button data-value="flat">♭</button>
+          </div>
+          <button id="kb-clear" class="btn-ghost">全消去</button>
+        </div>
+        <div class="keyboard-scroll" id="keyboard-scroll">
+          <div class="keyboard" id="keyboard"></div>
+        </div>
+      </details>
 
       <section class="block" id="ji" hidden>
         <div class="block-head">
@@ -114,32 +129,8 @@
         </div>
       </section>
 
-      <details class="block keyboard-box" id="keyboard-box">
-        <summary>
-          <span>鍵盤で入力</span>
-          <span class="summary-sub">タップで追加・もう一度で削除</span>
-        </summary>
-        <div class="keyboard-tools">
-          <span>黒鍵の表記</span>
-          <div class="seg small" id="spelling-seg">
-            <button data-value="sharp">♯</button>
-            <button data-value="flat">♭</button>
-          </div>
-          <button id="kb-clear" class="btn-ghost">全消去</button>
-        </div>
-        <div class="keyboard-scroll" id="keyboard-scroll">
-          <div class="keyboard" id="keyboard"></div>
-        </div>
-      </details>
     </section>
 
-    <!-- 一括 -->
-    <section id="tab-bulk" class="tab-panel" hidden>
-      <textarea id="bulk-input" rows="6" placeholder="1行に1つずつ構成音を入力&#10;ドミソ&#10;レファラド&#10;ソシレファ&#10;ドミソ"
-                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="構成音（1行に1コード）"></textarea>
-      <p class="hint">音律・基準・基準ピッチは「個別」の設定と共通です。カードをタップすると個別表示に切り替わります。</p>
-      <div id="bulk-result" class="bulk-list"></div>
-    </section>
 
     <article class="about">
       <h2>このアプリについて</h2>
