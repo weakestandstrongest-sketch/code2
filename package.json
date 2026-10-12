@@ -4,7 +4,7 @@
   "private": true,
   "description": "構成音からコード名を判定し、純正律での各音のずれ（セント）を表示する Web アプリ",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "start": "npx http-server . -p 8080 -c-1"
   }
 }

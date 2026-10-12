@@ -1,5 +1,5 @@
 /* Chord Finder JI — オフライン用 Service Worker */
-const CACHE = 'chord-finder-ji-v1';
+const CACHE = 'chord-finder-ji-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -11,6 +11,28 @@ const ASSETS = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
+  'audio/piano/A1.mp3',
+  'audio/piano/A2.mp3',
+  'audio/piano/A3.mp3',
+  'audio/piano/A4.mp3',
+  'audio/piano/A5.mp3',
+  'audio/piano/A6.mp3',
+  'audio/piano/C2.mp3',
+  'audio/piano/C3.mp3',
+  'audio/piano/C4.mp3',
+  'audio/piano/C5.mp3',
+  'audio/piano/C6.mp3',
+  'audio/piano/C7.mp3',
+  'audio/piano/Ds2.mp3',
+  'audio/piano/Ds3.mp3',
+  'audio/piano/Ds4.mp3',
+  'audio/piano/Ds5.mp3',
+  'audio/piano/Ds6.mp3',
+  'audio/piano/Fs2.mp3',
+  'audio/piano/Fs3.mp3',
+  'audio/piano/Fs4.mp3',
+  'audio/piano/Fs5.mp3',
+  'audio/piano/Fs6.mp3',
 ];
 
 self.addEventListener('install', (event) => {

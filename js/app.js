@@ -5,12 +5,14 @@
   const E = window.ChordEngine;
   const A = window.ChordAudio;
   const $ = (id) => document.getElementById(id);
+  const SVG_NS = 'http://www.w3.org/2000/svg';
 
-  const SETTINGS_KEY = 'chord-finder-ji:settings';
-  const WHITE_W = 36;
+  const SETTINGS_KEY = 'chord-finder-ji:settings:v2';
+  const WHITE_W = 35;
   const KEY_LOW = 36; // C2
   const KEY_HIGH = 84; // C6
   const BLACK = new Set([1, 3, 6, 8, 10]);
+  const EXAMPLES = ['ドミソ', 'レファラド', 'ソシレファ', 'C E G B♭ D'];
 
   const RATIO_NAMES = {
     '1/1': 'ユニゾン（ルート）',
@@ -30,7 +32,6 @@
     '9/5': '純正短7度（大）', '16/9': '純正短7度（小）＝ピタゴラス短7度', '7/4': '自然7度（第7倍音）',
     '15/8': '純正長7度', '243/128': 'ピタゴラス長7度',
   };
-
   const LIMIT_NAMES = { 1: '', 3: '3リミット', 5: '5リミット', 7: '7リミット', 11: '11リミット', 17: '17リミット' };
 
   const state = {
@@ -38,12 +39,15 @@
     mode: 'just5',
     ref: 'root',
     tonic: 0,
-    a4: 440,
+    a4: 442,
     spelling: 'flat',
     selected: 0,
     overrides: {},
     analysis: null,
     tuning: null,
+    piano: { loaded: 0, total: 0, done: false, failed: false },
+    playing: null,
+    playingButton: null,
   };
 
   /* ---------------------------------------------------------- helpers */
@@ -77,6 +81,13 @@
     return node;
   }
 
+  function svg(tag, attrs, ...children) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+    for (const c of children) node.append(c);
+    return node;
+  }
+
   function fmtCents(x) {
     const r = Math.round(x * 10) / 10;
     if (r === 0) return '0.0';
@@ -84,9 +95,13 @@
   }
   const centsClass = (x) => (Math.abs(x) < 0.05 ? 'zero' : x < 0 ? 'neg' : 'pos');
   const degLabel = (d) => (d === '1' ? 'R' : d);
+  const fmtA4 = (v) => String(Math.round(v * 10) / 10);
 
-  function tuneOpts() {
-    return { mode: state.mode, ref: state.ref, tonic: state.tonic, a4: state.a4, overrides: state.overrides };
+  function tuneOpts(withOverrides) {
+    return {
+      mode: state.mode, ref: state.ref, tonic: state.tonic, a4: state.a4,
+      overrides: withOverrides ? state.overrides : {},
+    };
   }
 
   /* ---------------------------------------------------------- analyze */
@@ -102,9 +117,23 @@
     render();
   }
 
+  function setInput(text) {
+    state.input = text;
+    $('notes-input').value = text;
+    compute();
+  }
+
   function render() {
     renderChips();
-    renderResult();
+    renderStage();
+    renderCandidates();
+    renderTuning();
+    renderKeyboard();
+  }
+
+  /** 選択中の解釈を変えずに、チューニング関連だけ描き直す */
+  function renderTuningViews() {
+    renderStage();
     renderTuning();
     renderKeyboard();
   }
@@ -114,75 +143,150 @@
     box.replaceChildren();
     const a = state.analysis;
     if (!a) return;
-    for (const n of a.notes) {
-      box.append(el('span', { class: 'chip' }, n.name + n.octave, el('small', {}, n.solfege)));
-    }
+    for (const n of a.notes) box.append(el('span', { class: 'chip' }, n.name + n.octave, el('small', {}, n.solfege)));
     if (a.unknown.length) {
-      box.append(el('span', { class: 'chip error' }, '読めない文字：' + [...new Set(a.unknown)].join(' ')));
+      box.append(el('span', { class: 'chip error' }, '読み取れない文字：' + [...new Set(a.unknown)].join(' ')));
     }
   }
 
-  function renderResult() {
+  /* ------------------------------------------------------------ stage */
+
+  function renderStage() {
     const a = state.analysis;
-    const box = $('result');
-    const head = $('result-head');
-    const body = $('result-body');
-    const old = document.querySelector('.cand-wrap');
-    if (old) old.remove();
-    if (!a || !a.notes.length) {
-      box.hidden = true;
+    const has = a && a.notes.length;
+    const label = $('stage-label');
+    const name = $('chord-name');
+    const ratio = $('ratio-line');
+    const examples = $('examples');
+    $('gauge-wrap').hidden = !has;
+    $('play-row').hidden = !has;
+    $('play-status').hidden = !has;
+    examples.hidden = !!has;
+    ratio.replaceChildren();
+
+    if (!has) {
+      state.tuning = null;
+      label.textContent = '構成音を入力すると、ここにコード名と純正律のずれが表示されます';
+      name.className = 'chord-name empty';
+      name.textContent = '例をタップして試す';
+      examples.replaceChildren(...EXAMPLES.map((q) => el('button', { onclick: () => setInput(q) }, q)));
       return;
     }
-    box.hidden = false;
-    const label = '「' + state.input.trim() + '」';
-    const cands = a.candidates;
+
+    const cand = a.candidates[state.selected] || null;
+    state.tuning = E.tune(a.notes, cand, tuneOpts(true));
+    const t = state.tuning;
     const pcs = new Set(a.notes.map((n) => n.pc));
 
-    if (!cands.length) {
-      box.classList.add('none');
-      head.textContent = label;
-      body.textContent = pcs.size === 1
-        ? '単音（' + a.notes[0].name + '）です。'
-        : '該当するコード名が見つかりませんでした。';
+    label.textContent = '「' + state.input.trim() + '」のコード名';
+    if (cand) {
+      name.className = 'chord-name';
+      name.textContent = cand.name;
     } else {
-      box.classList.remove('none');
-      head.textContent = label + 'のコード名は';
-      body.textContent = cands[state.selected].name + ' です。';
+      name.className = 'chord-name empty';
+      name.textContent = pcs.size === 1 ? '単音（' + a.notes[0].name + '）' : '該当するコード名が見つかりません';
     }
 
-    const wrap = el('div', { class: 'cand-wrap' });
-    if (cands.length) {
-      const tbody = el('tbody');
-      cands.slice(0, 10).forEach((c, i) => {
-        tbody.append(el('tr', {
-          class: i === state.selected ? 'selected' : '',
-          onclick: () => {
-            state.selected = i;
-            state.overrides = {};
-            renderResult();
-            renderTuning();
-            renderKeyboard();
-          },
-        }, el('td', {}, c.name), el('td', { class: 'score' }, String(-c.cost))));
-      });
-      wrap.append(el('table', { class: 'candidates' },
-        el('thead', {}, el('tr', {}, el('th', {}, '該当するコード名'), el('th', {}, 'スコア'))),
-        tbody));
-      wrap.append(el('p', { class: 'cand-note' },
-        '※どのコード名も同じ構成音になります。', el('br'),
-        '※スコアは単純で一般的なほど高くなります。', el('br'),
-        '※行をタップすると、その解釈で純正律を計算します。'));
+    if (t.ints && t.rows.length > 1) {
+      ratio.append(t.ints.join(' : '));
+      if (t.fundamental && t.ints[0] > 1 && t.fundamental.freq >= 20) {
+        ratio.append(el('small', {}, '共通の基音 ' + E.midiName(t.fundamental.midi, state.spelling === 'flat') +
+          ' ≈ ' + t.fundamental.freq.toFixed(1) + ' Hz'));
+      }
     }
     if (pcs.size === 2) {
       const [x, y] = [...new Map(a.notes.map((n) => [n.pc, n])).values()];
-      wrap.append(el('p', { class: 'cand-note' }, '音程：' + x.name + '→' + y.name + ' は ' + E.intervalName(x, y)));
+      ratio.append(el('small', {}, '音程：' + x.name + ' → ' + y.name + '　' + E.intervalName(x, y)));
     }
-    box.after(wrap);
+    renderGauge(t);
+    renderPlayStatus();
   }
 
+  function renderGauge(t) {
+    const g = $('gauge');
+    g.replaceChildren();
+    const cx = 160;
+    const cy = 168;
+    const R = 140;
+    const DEG_PER_CENT = 1.6;
+    const clamp = (c) => Math.max(-50, Math.min(50, c));
+    const ang = (c) => ((-90 + clamp(c) * DEG_PER_CENT) * Math.PI) / 180;
+    const pt = (c, r) => [cx + r * Math.cos(ang(c)), cy + r * Math.sin(ang(c))];
+    const arc = (c0, c1, r) => {
+      const [x0, y0] = pt(c0, r);
+      const [x1, y1] = pt(c1, r);
+      return 'M' + x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + r + ' ' + r + ' 0 0 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2);
+    };
+
+    g.append(svg('path', { class: 'g-arc', d: arc(-50, 50, R) }));
+    g.append(svg('path', { class: 'g-arc-flat', d: arc(-50, -1, R + 6) }));
+    g.append(svg('path', { class: 'g-arc-sharp', d: arc(1, 50, R + 6) }));
+    for (let c = -50; c <= 50; c += 5) {
+      const major = c % 25 === 0;
+      const [x0, y0] = pt(c, R - (major ? 14 : 7));
+      const [x1, y1] = pt(c, R);
+      g.append(svg('line', {
+        class: 'g-tick' + (c === 0 ? ' center' : major ? ' major' : ''),
+        x1: x0, y1: y0, x2: x1, y2: y1,
+      }));
+      if (major) {
+        const [lx, ly] = pt(c, R + 18);
+        g.append(svg('text', { class: 'g-num', x: lx, y: ly + 3 }, c > 0 ? '+' + c : c < 0 ? '−' + -c : '0'));
+      }
+    }
+    g.append(svg('text', { class: 'g-unit', x: cx, y: cy + 18 }, 'cents'));
+
+    // 同じ音名（オクターブ違い）は1本の針にまとめる
+    const groups = new Map();
+    for (const r of t.rows) if (!groups.has(r.note.pc)) groups.set(r.note.pc, { offset: r.offset, name: r.note.name });
+    const needles = [...groups.values()].sort((p, q) => p.offset - q.offset);
+    let prev = null;
+    for (const n of needles) {
+      n.level = prev && Math.abs(n.offset - prev.offset) < 9 ? (prev.level + 1) % 4 : 0;
+      prev = n;
+    }
+    needles.forEach((n, i) => {
+      g.append(svg('g', {
+        class: 'g-needle ' + centsClass(n.offset),
+        style: 'transform: rotate(' + (clamp(n.offset) * DEG_PER_CENT).toFixed(2) + 'deg); animation-delay: ' + i * 40 + 'ms',
+      }, svg('line', { x1: cx, y1: cy - 14, x2: cx, y2: cy - (R - 16) })));
+    });
+    needles.forEach((n) => {
+      const [x, y] = pt(n.offset, R - 34 - n.level * 22);
+      g.append(svg('g', { class: 'g-label ' + centsClass(n.offset) },
+        svg('circle', { cx: x, cy: y, r: 11 }),
+        svg('text', { x, y }, n.name)));
+    });
+    g.append(svg('circle', { class: 'g-hub', cx, cy, r: 7 }));
+  }
+
+  /* ------------------------------------------------------- candidates */
+
+  function renderCandidates() {
+    const a = state.analysis;
+    const cands = a ? a.candidates : [];
+    $('cand-block').hidden = cands.length < 2;
+    const box = $('cands');
+    box.replaceChildren();
+    cands.slice(0, 12).forEach((c, i) => {
+      box.append(el('button', {
+        class: 'cand' + (i === state.selected ? ' active' : ''),
+        'aria-pressed': i === state.selected ? 'true' : 'false',
+        onclick: () => {
+          state.selected = i;
+          state.overrides = {};
+          renderCandidates();
+          renderTuningViews();
+        },
+      }, el('span', { class: 'n' }, c.name), el('span', { class: 's' }, String(-c.cost))));
+    });
+    $('cand-note').textContent = 'どの候補も同じ構成音です。タップすると、その解釈（ルート）で純正律を計算し直します。';
+  }
+
+  /* ------------------------------------------------------------ tuner */
+
   function meter(offset) {
-    const clamped = Math.max(-50, Math.min(50, offset));
-    const pct = 50 + clamped;
+    const pct = 50 + Math.max(-50, Math.min(50, offset));
     const m = el('div', { class: 'meter' }, el('div', { class: 'track' }));
     for (const t of [-50, -25, 0, 25, 50]) {
       m.append(el('div', { class: 'tick' + (t === 0 ? ' center' : ''), style: 'left:' + (50 + t) + '%' }));
@@ -192,32 +296,14 @@
   }
 
   function renderTuning() {
-    const a = state.analysis;
-    const box = $('ji');
-    if (!a || !a.notes.length) {
-      box.hidden = true;
-      state.tuning = null;
-      return;
-    }
-    box.hidden = false;
-    const cand = a.candidates[state.selected] || null;
-    const t = E.tune(a.notes, cand, tuneOpts());
-    state.tuning = t;
-
-    const line = $('ratio-line');
-    line.replaceChildren();
-    const basis = cand ? cand.name + ' のルート ' + t.root.name : '最低音 ' + t.root.name;
-    line.append('度数は ' + basis + ' から。');
-    if (t.ints && t.rows.length > 1) {
-      line.append(el('br'), '周波数比 ', el('strong', {}, t.ints.join(' : ')));
-      if (t.fundamental && t.ints[0] > 1 && t.fundamental.freq >= 20) {
-        line.append('（共通の基音 ' + E.midiName(t.fundamental.midi, state.spelling === 'flat') +
-          ' ≈ ' + t.fundamental.freq.toFixed(1) + ' Hz）');
-      }
-    }
-    if (state.ref !== 'root') {
-      line.append(el('br'), 'ルート ' + t.root.name + ' のずれ：' + fmtCents(t.refOffset) + '¢');
-    }
+    const t = state.tuning;
+    $('ji').hidden = !t;
+    document.querySelectorAll('.a4-echo').forEach((n) => { n.textContent = fmtA4(state.a4); });
+    if (!t) return;
+    const cand = state.analysis.candidates[state.selected];
+    const refText = { root: 'ルート', bass: '最低音', key: E.PC_NAMES_FLAT[state.tonic] + ' を主音' }[state.ref];
+    $('ji-basis').textContent = (cand ? cand.name : t.root.name) + '・' + refText + '基準' +
+      (state.ref !== 'root' ? '（ルートのずれ ' + fmtCents(t.refOffset) + '¢）' : '');
 
     const rows = $('ji-rows');
     rows.replaceChildren();
@@ -225,10 +311,9 @@
       const opt = r.options[r.choice];
       const ratioBtn = el('button', {
         class: 'ratio-btn' + (r.isDefault ? '' : ' changed'),
-        'aria-label': '純正比を変更',
+        'aria-label': r.note.name + ' の純正比 ' + opt.label + (r.options.length > 1 ? '（タップで変更）' : ''),
         onclick: () => openSheet(i),
-      }, opt.label, el('span', { class: 'lim' }, LIMIT_NAMES[opt.limit] || opt.limit + 'リミット'),
-      r.options.length > 1 ? el('span', { class: 'caret' }, '▼') : null);
+      }, opt.label, r.options.length > 1 ? el('span', { class: 'caret' }, '▼') : null);
       if (r.options.length < 2) ratioBtn.disabled = true;
 
       rows.append(el('div', { class: 'ji-row' },
@@ -238,41 +323,47 @@
         el('div', { class: 'ji-mid' },
           el('span', { class: 'deg' + (r.inChord ? '' : ' outside'), title: r.inChord ? '度数' : 'コード外の音' }, degLabel(r.degree)),
           ratioBtn,
-          el('span', { class: 'ji-hz' }, r.freqET.toFixed(2) + ' → ' + r.freqJI.toFixed(2) + ' Hz')),
-        el('div', { class: 'ji-cents ' + centsClass(r.offset) }, fmtCents(r.offset), el('small', {}, '¢')),
+          el('span', { class: 'ji-hz' },
+            el('span', { class: 'lim' }, LIMIT_NAMES[opt.limit] || ''),
+            r.freqJI.toFixed(2) + ' Hz')),
+        el('div', { class: 'ji-cents ' + centsClass(r.offset) + '-t' }, fmtCents(r.offset), el('small', {}, '¢')),
         meter(r.offset)));
     });
-    rows.append(el('div', { class: 'meter-labels' },
-      el('span', {}, '−50¢'), el('span', {}, '低く ← 平均律 → 高く'), el('span', {}, '+50¢')));
   }
 
   /* ------------------------------------------------------- ratio sheet */
 
   function openSheet(rowIndex) {
     const r = state.tuning.rows[rowIndex];
-    const close = () => backdrop.remove();
-    const sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' },
-      el('h3', {}, r.note.name + r.note.octave + '（' + degLabel(r.degree) + '）の純正比'),
-      el('p', { class: 'hint' }, 'ルートからの比を選びます。セントは平均律との差（ルート基準）です。'));
-    const def = r.defaultChoice;
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const close = () => {
+      backdrop.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    const sheet = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '純正比の選択' },
+      el('div', { class: 'grabber' }),
+      el('h3', {}, el('span', { class: 'nm' }, r.note.name + r.note.octave), '（' + degLabel(r.degree) + '）の純正比'),
+      el('p', { class: 'hint' }, 'ルートからの比を選びます。右の数字はルートを基準にした平均律との差です。'));
     r.options.forEach((o, k) => {
       sheet.append(el('button', {
         class: 'opt' + (k === r.choice ? ' active' : ''),
         onclick: () => {
           state.overrides[rowIndex] = k;
           close();
-          renderTuning();
-          renderKeyboard();
+          renderTuningViews();
         },
       },
       el('span', { class: 'r' }, o.label),
       el('span', { class: 'd' }, (RATIO_NAMES[o.label] || '') + (LIMIT_NAMES[o.limit] ? '・' + LIMIT_NAMES[o.limit] : '') +
-        (k === def ? '・既定' : '')),
+        (k === r.defaultChoice ? '・既定' : '')),
       el('span', { class: 'c ' + centsClass(o.dev) + '-t' }, fmtCents(o.dev) + '¢')));
     });
-    sheet.append(el('button', { class: 'btn', style: 'width:100%;margin-top:12px', onclick: close }, '閉じる'));
+    sheet.append(el('button', { class: 'close', onclick: () => close() }, '閉じる'));
     const backdrop = el('div', { class: 'sheet-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } }, sheet);
     document.body.append(backdrop);
+    document.addEventListener('keydown', onKey);
+    const active = sheet.querySelector('.opt.active');
+    if (active) active.focus();
   }
 
   /* ---------------------------------------------------------- keyboard */
@@ -293,7 +384,7 @@
     let whites = 0;
     for (let m = KEY_LOW; m <= KEY_HIGH; m++) {
       const black = BLACK.has(m % 12);
-      const left = black ? whites * WHITE_W - 12 : whites * WHITE_W;
+      const left = black ? whites * WHITE_W - 11 : whites * WHITE_W;
       if (!black) whites++;
       kb.append(el('button', {
         class: 'key ' + (black ? 'black' : 'white'),
@@ -313,29 +404,25 @@
       const m = Number(key.dataset.midi);
       const r = byMidi.get(m);
       key.classList.toggle('on', !!r);
+      key.setAttribute('aria-pressed', r ? 'true' : 'false');
       key.replaceChildren();
       if (r) key.append(el('span', { class: 'k-cents' }, fmtCents(r.offset)));
       if (m % 12 === 0) key.append(el('span', { class: 'k-label' }, 'C' + (Math.floor(m / 12) - 1)));
     }
-    document.querySelectorAll('#spelling-seg button').forEach((b) => {
-      b.classList.toggle('active', b.dataset.value === state.spelling);
-    });
+    syncSeg('spelling-seg', state.spelling);
   }
 
   function toggleKey(midi) {
-    const notes = state.analysis ? state.analysis.notes.slice() : [];
-    const at = notes.findIndex((n) => n.midi === midi);
-    let list = notes.map((n) => ({ midi: n.midi, text: n.name + n.octave }));
+    const notes = state.analysis ? state.analysis.notes : [];
+    const list = notes.map((n) => ({ midi: n.midi, text: n.name + n.octave }));
+    const at = list.findIndex((n) => n.midi === midi);
     if (at >= 0) list.splice(at, 1);
     else {
       const [l, acc] = SPELL[state.spelling][midi % 12];
-      const text = E.LETTERS[l] + (acc > 0 ? '♯' : acc < 0 ? '♭' : '') + (Math.floor(midi / 12) - 1);
-      list.push({ midi, text });
+      list.push({ midi, text: E.LETTERS[l] + (acc > 0 ? '♯' : acc < 0 ? '♭' : '') + (Math.floor(midi / 12) - 1) });
     }
     list.sort((x, y) => x.midi - y.midi);
-    state.input = list.map((x) => x.text).join(' ');
-    $('notes-input').value = state.input;
-    compute();
+    setInput(list.map((x) => x.text).join(' '));
   }
 
   function scrollKeyboard() {
@@ -346,12 +433,16 @@
 
   /* ------------------------------------------------------------- audio */
 
-  function playButtons(active) {
-    for (const id of ['play-et', 'play-ji', 'play-ab']) $(id).classList.remove('playing');
-    const status = $('play-status');
-    if (active === 'et') status.textContent = '♪ 平均律で再生中…';
-    else if (active === 'ji') status.textContent = '♪ 純正律で再生中…';
-    else status.textContent = '※iPhoneの消音モード中は音が出ない場合があります。';
+  function renderPlayStatus() {
+    for (const k of ['et', 'ji', 'ab']) $('play-' + k).classList.remove('playing');
+    const s = $('play-status');
+    const p = state.piano;
+    if (state.playing === 'loading') s.textContent = 'ピアノ音源を読み込み中… ' + p.loaded + ' / ' + p.total;
+    else if (state.playing === 'et') s.textContent = '♪ 平均律（A4 = ' + fmtA4(state.a4) + ' Hz）で再生中';
+    else if (state.playing === 'ji') s.textContent = '♪ 純正律で再生中';
+    else if (p.failed) s.textContent = 'ピアノ音源を読み込めないため、簡易音で再生します。';
+    else s.textContent = 'グランドピアノ音源 · A4 = ' + fmtA4(state.a4) + ' Hz · 消音モードでは鳴らない場合があります';
+    if (state.playingButton && state.playing) $('play-' + state.playingButton).classList.add('playing');
   }
 
   function play(kind) {
@@ -360,13 +451,14 @@
     const et = t.rows.map((r) => r.freqET);
     const ji = t.rows.map((r) => r.freqJI);
     let steps;
-    if (kind === 'et') steps = [{ freqs: et, dur: 3, label: 'et' }];
-    else if (kind === 'ji') steps = [{ freqs: ji, dur: 3, label: 'ji' }];
-    else steps = [et, ji, et, ji].map((f, i) => ({ freqs: f, dur: 1.8, label: i % 2 ? 'ji' : 'et' }));
-    const btn = $('play-' + kind);
+    if (kind === 'et') steps = [{ freqs: et, dur: 3.2, label: 'et' }];
+    else if (kind === 'ji') steps = [{ freqs: ji, dur: 3.2, label: 'ji' }];
+    else steps = [et, ji, et, ji].map((f, i) => ({ freqs: f, dur: 2, label: i % 2 ? 'ji' : 'et' }));
+    state.playingButton = kind;
     A.playSequence(steps, (label) => {
-      playButtons(label);
-      if (label) btn.classList.add('playing');
+      state.playing = label;
+      if (!label) state.playingButton = null;
+      renderPlayStatus();
     });
   }
 
@@ -376,35 +468,30 @@
     const out = $('bulk-result');
     out.replaceChildren();
     const lines = $('bulk-input').value.split('\n').map((s) => s.trim()).filter(Boolean);
-    if (!lines.length) return;
-    const tbody = el('tbody');
     lines.forEach((line, i) => {
       const a = E.analyze(line);
       const c = a.candidates[0];
-      const offs = el('div', { class: 'offs' });
+      const offs = el('span', { class: 'offs' });
       if (a.notes.length) {
-        const t = E.tune(a.notes, c || null, { mode: state.mode, ref: state.ref, tonic: state.tonic, a4: state.a4 });
+        const t = E.tune(a.notes, c || null, tuneOpts(false));
         for (const r of t.rows) {
           offs.append(el('span', {}, r.note.name + ' ', el('b', { class: centsClass(r.offset) + '-t' }, fmtCents(r.offset))));
         }
-        if (t.ints && t.rows.length > 1) offs.append(el('span', {}, '(' + t.ints.join(':') + ')'));
+        if (t.ints && t.rows.length > 1) offs.append(el('span', { class: 'ratio' }, t.ints.join(':')));
       }
-      tbody.append(el('tr', {
+      out.append(el('button', {
+        class: 'bulk-card',
         onclick: () => {
-          state.input = line;
-          $('notes-input').value = line;
           switchTab('single');
-          compute();
+          setInput(line);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         },
       },
-      el('td', {}, String(i + 1)),
-      el('td', { class: 'in' }, line),
-      el('td', {}, el('div', { class: 'chord' }, c ? c.name : '—'), offs)));
+      el('span', { class: 'no' }, String(i + 1).padStart(2, '0')),
+      el('span', { class: 'chord' }, c ? c.name : '—'),
+      el('span', { class: 'src' }, line),
+      offs));
     });
-    out.append(el('table', { class: 'bulk-table' },
-      el('thead', {}, el('tr', {}, el('th', {}, '#'), el('th', {}, '入力'), el('th', {}, 'コード名 / 純正律のずれ(¢)'))),
-      tbody));
   }
 
   /* -------------------------------------------------------------- tabs */
@@ -413,37 +500,52 @@
     document.querySelectorAll('.tab').forEach((b) => {
       const on = b.dataset.tab === name;
       b.classList.toggle('active', on);
-      b.setAttribute('aria-selected', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     $('tab-single').hidden = name !== 'single';
     $('tab-bulk').hidden = name !== 'bulk';
     if (name === 'bulk') renderBulk();
   }
 
-  /* -------------------------------------------------------------- init */
+  /* ---------------------------------------------------------- settings */
+
+  function syncSeg(id, value) {
+    document.querySelectorAll('#' + id + ' button').forEach((b) => {
+      const on = b.dataset.value === String(value);
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
 
   function syncSettingsUI() {
-    $('mode-select').value = state.mode;
-    $('ref-select').value = state.ref;
+    syncSeg('mode-seg', state.mode);
+    syncSeg('ref-seg', state.ref);
+    syncSeg('a4-seg', state.a4);
     $('tonic-select').value = String(state.tonic);
     $('tonic-setting').hidden = state.ref !== 'key';
     $('a4-input').value = state.a4;
+    $('pill-a4').textContent = fmtA4(state.a4);
   }
 
   function onSettingsChanged() {
     saveSettings();
     syncSettingsUI();
     state.overrides = {};
-    renderTuning();
-    renderKeyboard();
+    renderTuningViews();
     if (!$('tab-bulk').hidden) renderBulk();
   }
+
+  function bindSeg(id, apply) {
+    document.querySelectorAll('#' + id + ' button').forEach((b) => b.addEventListener('click', () => apply(b.dataset.value)));
+  }
+
+  /* -------------------------------------------------------------- init */
 
   function init() {
     loadSettings();
 
     const tonic = $('tonic-select');
-    E.PC_NAMES_FLAT.forEach((n, i) => tonic.append(el('option', { value: i }, n + (i === 6 ? ' / F♯' : '') + ' を主音に')));
+    E.PC_NAMES_FLAT.forEach((n, i) => tonic.append(el('option', { value: i }, n + (i === 6 ? ' / F♯' : ''))));
     syncSettingsUI();
     buildKeyboard();
 
@@ -461,30 +563,25 @@
       compute();
     });
     $('clear-input').addEventListener('click', () => {
-      input.value = '';
-      state.input = '';
-      compute();
+      setInput('');
       input.focus();
     });
-    $('kb-clear').addEventListener('click', () => {
-      input.value = '';
-      state.input = '';
-      compute();
-    });
+    $('kb-clear').addEventListener('click', () => setInput(''));
     $('keyboard-box').addEventListener('toggle', () => { if ($('keyboard-box').open) scrollKeyboard(); });
-    document.querySelectorAll('#spelling-seg button').forEach((b) => b.addEventListener('click', () => {
-      state.spelling = b.dataset.value;
-      saveSettings();
-      renderKeyboard();
-    }));
 
-    $('mode-select').addEventListener('change', (e) => { state.mode = e.target.value; onSettingsChanged(); });
-    $('ref-select').addEventListener('change', (e) => { state.ref = e.target.value; onSettingsChanged(); });
-    $('tonic-select').addEventListener('change', (e) => { state.tonic = Number(e.target.value); onSettingsChanged(); });
+    bindSeg('spelling-seg', (v) => { state.spelling = v; saveSettings(); renderKeyboard(); });
+    bindSeg('mode-seg', (v) => { state.mode = v; onSettingsChanged(); });
+    bindSeg('ref-seg', (v) => { state.ref = v; onSettingsChanged(); });
+    bindSeg('a4-seg', (v) => { state.a4 = Number(v); onSettingsChanged(); });
+    tonic.addEventListener('change', (e) => { state.tonic = Number(e.target.value); onSettingsChanged(); });
     $('a4-input').addEventListener('change', (e) => {
       const v = Number(e.target.value);
       if (v >= 400 && v <= 480) state.a4 = v;
       onSettingsChanged();
+    });
+    $('pitch-pill').addEventListener('click', () => {
+      switchTab('single');
+      $('settings').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
     $('play-et').addEventListener('click', () => play('et'));
@@ -503,6 +600,19 @@
       input.value = state.input;
     }
     compute();
+
+    A.onStatus((s) => {
+      state.piano = s;
+      if (!$('play-row').hidden) renderPlayStatus();
+    });
+    // 最初の操作でピアノ音源を読み込み始める（iOS では操作前の音声処理が制限されるため）
+    const warm = () => {
+      A.load();
+      window.removeEventListener('pointerdown', warm);
+      window.removeEventListener('keydown', warm);
+    };
+    window.addEventListener('pointerdown', warm);
+    window.addEventListener('keydown', warm);
 
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('sw.js').catch(() => { /* not available here */ });
